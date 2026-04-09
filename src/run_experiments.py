@@ -10,7 +10,8 @@ from joint_state import JointStateSolver
 from prioritized import PrioritizedPlanningSolver
 from group_action import GroupActionSolver
 from group_action_greedy import GroupActionGreedySolver
-from group_action_astar_with_expanding_deque_length import GroupActionWithExpandingDequeLengthSolver
+from group_action_expanding_deque_length import GroupActionWithExpandingDequeLengthSolver
+from group_action_tapf import GroupActionTAPFSolver
 from visualize import Animation
 from single_agent_planner import get_sum_of_cost
 
@@ -122,6 +123,9 @@ if __name__ == '__main__':
         elif args.solver == "GroupActionWithExpandingDequeLength":
             print("***Run GroupActionWithExpandingDequeLength***")
             solver = GroupActionWithExpandingDequeLengthSolver(my_map, starts, goals)
+        elif args.solver == "GroupActionTAPF":
+            print("***Run GroupActionTAPF***")
+            solver = GroupActionTAPFSolver(my_map, starts, goals, graph=args.graph)
         else:
             raise RuntimeError("Unknown solver!")
 

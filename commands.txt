@@ -1,1 +1,3 @@
- python run_experiments.py --instance "instances/test_*" --solver GroupActionGreedy --batch
+python run_experiments.py --instance "instances/test_*" --solver GroupActionGreedy --batch
+python run_experiments.py --instance "instances/test_1.txt" --solver GroupAction --graph
+python run_experiments.py --instance "instances/test_1.txt" --solver GroupActionTAPF --graph
