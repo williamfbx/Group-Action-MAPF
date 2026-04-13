@@ -242,6 +242,9 @@ class GroupActionTAPFSolver(object):
         self.curr_agent_locations = list(starts)
         self.next_expansion_agent_deque = deque(range(self.num_of_agents))
         self.transposition_deque = deque()
+        self.backtrack_tally = {agent_id: 0 for agent_id in range(self.num_of_agents)}
+        self.pick_iteration = 0
+        self.last_picked_iteration = {agent_id: -1 for agent_id in range(self.num_of_agents)}
         
         self.tree = Tree()
         self.current_tree_node = "root"
@@ -331,6 +334,44 @@ class GroupActionTAPFSolver(object):
         queue.append(agent_id)
         return agent_id
 
+    def _choose_agent_backtrack(self, backtrack_ratio=0.05):
+        queue = self.next_expansion_agent_deque
+
+        # Remove inactive agents from the existing queue.
+        queue = deque(agent_id for agent_id in queue if agent_id in self.active_agents)
+
+        # Add any active agents that are not yet in the queue.
+        seen = set(queue)
+        for agent_id in sorted(self.active_agents):
+            if agent_id not in seen:
+                queue.append(agent_id)
+
+        self.next_expansion_agent_deque = queue
+
+        best_agent = None
+        best_score = float('-inf')
+        best_wait = -1
+
+        for aid in queue:
+            last_iter = self.last_picked_iteration.get(aid, -1)
+            wait_iters = self.pick_iteration - last_iter
+            score = float(wait_iters) * (1.0 + backtrack_ratio * float(self.backtrack_tally.get(aid, 0)))
+
+            if score > best_score or (score == best_score and wait_iters > best_wait):
+                best_score = score
+                best_wait = wait_iters
+                best_agent = aid
+
+        chosen = best_agent
+
+        queue.remove(chosen)
+        queue.append(chosen)
+
+        self.pick_iteration += 1
+        self.last_picked_iteration[chosen] = self.pick_iteration
+
+        return chosen
+
     def _backtrack_with_ucb(self):
         all_nodes = self.tree.all_nodes()
         if not all_nodes:
@@ -384,6 +425,55 @@ class GroupActionTAPFSolver(object):
         
         return True
 
+    def _try_push_chain(self, agent_to_push, forbidden_cells, chain_agents):
+        if agent_to_push in chain_agents:
+            return False
+
+        new_chain = chain_agents | {agent_to_push}
+        current_pos = self.curr_agent_locations[agent_to_push]
+        new_forbidden = forbidden_cells | {current_pos}
+
+        legal_moves = find_legal_moves(current_pos, self.my_map)
+        legal_moves = [loc for loc in legal_moves if loc not in forbidden_cells]
+        ranked_moves = rank_legal_moves(current_pos, legal_moves, self.phi, self.my_map)
+
+        # Non-backtracking filter
+        most_recent_start = None
+        for moved_id, (_end, start_loc) in self.transposition_deque:
+            if moved_id == agent_to_push:
+                most_recent_start = start_loc
+                break
+        non_bt = [loc for loc in ranked_moves if loc != most_recent_start]
+        candidates = non_bt if non_bt else ranked_moves
+
+        for candidate in candidates:
+            occupant = find_clashing_agent(candidate, self.curr_agent_locations)
+            
+            # Cell is free
+            if occupant is None:
+                if agent_to_push not in self.active_agents:
+                    self.active_agents.add(agent_to_push)
+                    self.active_goals.add(current_pos)
+                    print("Reactivated agent {} due to collision".format(agent_to_push))
+                self.transposition_deque.appendleft((agent_to_push, (candidate, current_pos)))
+                self.curr_agent_locations[agent_to_push] = candidate
+                self._handle_goal_reached(agent_to_push)
+                return True
+            
+            # Cell is occupied by an agent not already in the chain
+            elif occupant not in new_chain:
+                if self._try_push_chain(occupant, new_forbidden, new_chain):
+                    if agent_to_push not in self.active_agents:
+                        self.active_agents.add(agent_to_push)
+                        self.active_goals.add(current_pos)
+                        print("Reactivated agent {} due to collision".format(agent_to_push))
+                    self.transposition_deque.appendleft((agent_to_push, (candidate, current_pos)))
+                    self.curr_agent_locations[agent_to_push] = candidate
+                    self._handle_goal_reached(agent_to_push)
+                    return True
+
+        return False
+
     def find_solution(self):
         """ Finds paths for all agents from their start locations to their goal locations."""
 
@@ -392,19 +482,11 @@ class GroupActionTAPFSolver(object):
         while not agents_at_goal(self.curr_agent_locations, self.goals):
             
             # Break out when hitting max time
-            if timer.time() - start_time > 1.0:
-                print("Exceeded max time. Terminating search.")
-                plot_solution(
-                    self.my_map,
-                    self.starts,
-                    self.goals,
-                    self.phi,
-                    "group_action_tapf_final.png",
-                )
+            if timer.time() - start_time > 30.0:
                 break
 
             # Choose queued agent
-            agent_id = self._choose_agent()
+            agent_id = self._choose_agent_backtrack()
             
             # Agent already at goal
             if self.curr_agent_locations[agent_id] in self.active_goals:
@@ -416,9 +498,9 @@ class GroupActionTAPFSolver(object):
             ranked_legal_moves = rank_legal_moves(self.curr_agent_locations[agent_id], legal_moves, self.phi, self.my_map)
             collision_on_move = check_collision_on_move(ranked_legal_moves, self.curr_agent_locations)
             
-            # DEBUG
-            print("Agent: {}, Current Location: {}, Legal Moves: {}, Ranked Legal Moves: {}, Collision on Move: {}".format(
-                agent_id, self.curr_agent_locations[agent_id], legal_moves, ranked_legal_moves, collision_on_move))
+            # # DEBUG
+            # print("Agent: {}, Current Location: {}, Legal Moves: {}, Ranked Legal Moves: {}, Collision on Move: {}".format(
+            #     agent_id, self.curr_agent_locations[agent_id], legal_moves, ranked_legal_moves, collision_on_move))
             
             # Priority move is non-clashing
             if ranked_legal_moves and not collision_on_move[0]:
@@ -431,26 +513,12 @@ class GroupActionTAPFSolver(object):
             # Priority move is clashing
             clashing_agent_id = find_clashing_agent(ranked_legal_moves[0], self.curr_agent_locations)
             print("Agent {} collides with Agent {} at {}".format(agent_id, clashing_agent_id, ranked_legal_moves[0]))
-            
-            # Move clashing agent to non-backtracking cell
-            clash_legal_moves = find_legal_moves(self.curr_agent_locations[clashing_agent_id], self.my_map)
-            clash_legal_moves = [loc for loc in clash_legal_moves if loc != self.curr_agent_locations[agent_id]]
-            clash_ranked_legal_moves = rank_legal_moves(self.curr_agent_locations[clashing_agent_id], clash_legal_moves, self.phi, self.my_map)
-            clash_move = find_non_backtracking_move(clashing_agent_id, clash_ranked_legal_moves, self.transposition_deque, self.curr_agent_locations)
-            print("Clashing agent {} non-backtracking moves: {}".format(clashing_agent_id, clash_move))
-            
-            if clash_move:
-                if clashing_agent_id not in self.active_agents:
-                    self.active_agents.add(clashing_agent_id)
-                    self.active_goals.add(self.curr_agent_locations[clashing_agent_id])
-                    print("Reactivated agent {} due to collision".format(clashing_agent_id))
-                
-                self.transposition_deque.appendleft((clashing_agent_id, (clash_move[0], self.curr_agent_locations[clashing_agent_id])))
-                self.curr_agent_locations[clashing_agent_id] = clash_move[0]
-                self._handle_goal_reached(clashing_agent_id)
-                
-                self.transposition_deque.appendleft((agent_id, (ranked_legal_moves[0], self.curr_agent_locations[agent_id])))
-                self.curr_agent_locations[agent_id] = ranked_legal_moves[0]
+
+            # Recursively push the chain of blocking agents to free the target cell.
+            target_cell = ranked_legal_moves[0]
+            if self._try_push_chain(clashing_agent_id, {self.curr_agent_locations[agent_id]}, {agent_id}):
+                self.transposition_deque.appendleft((agent_id, (target_cell, self.curr_agent_locations[agent_id])))
+                self.curr_agent_locations[agent_id] = target_cell
                 self._handle_goal_reached(agent_id)
                 continue
             
@@ -465,6 +533,7 @@ class GroupActionTAPFSolver(object):
                 continue
             
             # Backtrack to best node using UCB
+            self.backtrack_tally[agent_id] += 1
             if not self._backtrack_with_ucb():
                 print("Backtracking failed. No valid nodes to backtrack to.")
                 break
@@ -502,6 +571,8 @@ class GroupActionTAPFSolver(object):
         self.CPU_time = timer.time() - start_time
 
         print("CPU time (s):    {:.2f}".format(self.CPU_time))
+        print("Num of agents:   {}".format(self.num_of_agents))
+        print("Node count:      {}".format(len(self.tree.all_nodes())))
         print("Sum of costs:    {}".format(get_sum_of_cost(result)))
 
         return result
