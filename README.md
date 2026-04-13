@@ -21,6 +21,15 @@ The main runner script is `src/run_experiments.py`, which loads instance files, 
 
 ---
 
+## Demo Video
+
+A sample project demo is shown below:
+
+[![TODO demo](TODO)](TODO)
+
+
+---
+
 ## Features
 
 - Multiple MAPF solvers
