@@ -136,13 +136,13 @@ def plot_solution(maze, starts, goals, phi, output_path):
 			)
 		)
 
-	fig.legend(
-		handles=legend_handles,
-		loc="lower center",
-		ncol=min(6, max(1, len(legend_handles))),
-		frameon=True,
-		bbox_to_anchor=(0.5, -0.02),
-	)
+	# fig.legend(
+	# 	handles=legend_handles,
+	# 	loc="lower center",
+	# 	ncol=min(6, max(1, len(legend_handles))),
+	# 	frameon=True,
+	# 	bbox_to_anchor=(0.5, -0.02),
+	# )
 	plt.tight_layout(rect=(0, 0.06, 1, 1))
 	plt.savefig(output_path, dpi=220, bbox_inches="tight")
 	plt.close(fig)

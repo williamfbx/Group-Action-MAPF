@@ -62,16 +62,17 @@ class Animation:
             self.agents[i].original_face_color = Colors[i % len(Colors)]
             self.patches.append(self.agents[i])
             self.T = max(self.T, len(paths[i]) - 1)
-            self.agent_names[i] = self.ax.text(starts[i][0], starts[i][1] + 0.25, name)
-            self.agent_names[i].set_horizontalalignment('center')
-            self.agent_names[i].set_verticalalignment('center')
-            self.artists.append(self.agent_names[i])
+            # self.agent_names[i] = self.ax.text(starts[i][0], starts[i][1] + 0.25, name)
+            # self.agent_names[i].set_horizontalalignment('center')
+            # self.agent_names[i].set_verticalalignment('center')
+            # self.artists.append(self.agent_names[i])
 
         self.animation = animation.FuncAnimation(self.fig, self.animate_func,
                                                  init_func=self.init_func,
                                                  frames=int(self.T + 1) * 10,
                                                  interval=100,
-                                                 blit=True)
+                                                 blit=True,
+                                                 repeat=False)
 
     def save(self, file_name, speed):
         self.animation.save(
@@ -95,7 +96,7 @@ class Animation:
         for k in range(len(self.paths)):
             pos = self.get_state(t / 10, self.paths[k])
             self.agents[k].center = (pos[0], pos[1])
-            self.agent_names[k].set_position((pos[0], pos[1] + 0.5))
+            # self.agent_names[k].set_position((pos[0], pos[1] + 0.5))
 
         # reset all colors
         for _, agent in self.agents.items():
