@@ -25,7 +25,7 @@ The main runner script is `src/run_experiments.py`, which loads instance files, 
 
 A sample project demo is shown below:
 
-[![TODO demo](TODO)](TODO)
+[![Project demo](Documents/thumbnail.gif)](Documents/thumbnail.gif)
 
 
 ---
